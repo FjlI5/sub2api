@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -90,6 +92,273 @@ func TestApplyCodexOAuthTransform_ToolContinuationNormalizesToolReferenceIDsOnly
 	second, ok := input[1].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "fc1", second["call_id"])
+}
+
+func TestApplyCodexOAuthTransform_ToolSearchOutputPreservesCallID(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.2",
+		"input": []any{
+			map[string]any{"type": "tool_search_output", "call_id": "call_1", "output": "ok"},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, false, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 1)
+
+	first, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "tool_search_output", first["type"])
+	require.Equal(t, "fc1", first["call_id"])
+}
+
+func TestApplyCodexOAuthTransform_CustomAndMCPToolOutputsPreserveCallID(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.2",
+		"input": []any{
+			map[string]any{"type": "custom_tool_call_output", "call_id": "call_custom", "output": "ok"},
+			map[string]any{"type": "mcp_tool_call_output", "call_id": "call_mcp", "output": "ok"},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, false, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 2)
+
+	first, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "fccustom", first["call_id"])
+
+	second, ok := input[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "fcmcp", second["call_id"])
+}
+
+func TestApplyCodexOAuthTransform_ImageAndWebSearchCallsDoNotGainCallID(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.2",
+		"input": []any{
+			map[string]any{"type": "image_generation_call", "id": "ig_123", "status": "completed"},
+			map[string]any{"type": "web_search_call", "call_id": "call_bad", "status": "completed"},
+		},
+		"tool_choice": "auto",
+	}
+
+	applyCodexOAuthTransform(reqBody, false, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 2)
+
+	first, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "ig_123", first["id"])
+	_, hasCallID := first["call_id"]
+	require.False(t, hasCallID)
+
+	second, ok := input[1].(map[string]any)
+	require.True(t, ok)
+	_, hasCallID = second["call_id"]
+	require.False(t, hasCallID)
+}
+
+func TestApplyCodexOAuthTransform_ConvertsToolRoleMessageToFunctionCallOutput(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"input": []any{
+			map[string]any{
+				"type":         "message",
+				"role":         "tool",
+				"tool_call_id": "call_1",
+				"content":      "ok",
+			},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 1)
+
+	item, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "function_call_output", item["type"])
+	require.Equal(t, "fc1", item["call_id"])
+	require.Equal(t, "ok", item["output"])
+	_, hasRole := item["role"]
+	require.False(t, hasRole)
+}
+
+func TestApplyCodexOAuthTransform_StringifiesNonStringMessageContentText(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"input": []any{
+			map[string]any{
+				"type": "message",
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "input_text", "text": []any{"a", "b"}},
+				},
+			},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	item, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	content, ok := item["content"].([]any)
+	require.True(t, ok)
+	part, ok := content[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, `["a","b"]`, part["text"])
+}
+
+func TestApplyCodexOAuthTransform_DowngradesUnknownToolChoice(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"tools": []any{
+			map[string]any{"type": "function", "name": "shell"},
+		},
+		"tool_choice": map[string]any{"type": "custom"},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	require.Equal(t, "auto", reqBody["tool_choice"])
+}
+
+func TestApplyCodexOAuthTransform_PreservesKnownToolChoice(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"tools": []any{
+			map[string]any{"type": "custom", "name": "shell"},
+		},
+		"tool_choice": map[string]any{"type": "custom"},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	choice, ok := reqBody["tool_choice"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "custom", choice["type"])
+}
+
+func TestApplyCodexOAuthTransform_NormalizesLegacyFunctionToolChoice(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"tools": []any{
+			map[string]any{"type": "function", "name": "shell"},
+		},
+		"tool_choice": map[string]any{
+			"type":     "function",
+			"function": map[string]any{"name": "shell"},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	choice, ok := reqBody["tool_choice"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "function", choice["type"])
+	require.Equal(t, "shell", choice["name"])
+	require.NotContains(t, choice, "function")
+}
+
+func TestApplyCodexOAuthTransform_DowngradesMissingFunctionToolChoice(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"tools": []any{
+			map[string]any{"type": "function", "name": "shell"},
+		},
+		"tool_choice": map[string]any{
+			"type":     "function",
+			"function": map[string]any{"name": "missing"},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	require.Equal(t, "auto", reqBody["tool_choice"])
+}
+
+func TestApplyCodexOAuthTransform_AddsFallbackNameForFunctionCallInput(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"input": []any{
+			map[string]any{"type": "message", "role": "user", "content": "run tool"},
+			map[string]any{"type": "function_call", "call_id": "call_1", "arguments": "{}"},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 2)
+	item, ok := input[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "function_call", item["type"])
+	require.Equal(t, "tool", item["name"])
+	require.Equal(t, "fc1", item["call_id"])
+}
+
+func TestApplyCodexOAuthTransform_PreservesFunctionCallInputName(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"input": []any{
+			map[string]any{"type": "custom_tool_call", "call_id": "call_1", "name": "shell", "input": "pwd"},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 1)
+	item, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "shell", item["name"])
+	require.Equal(t, "fc1", item["call_id"])
+}
+
+func TestApplyCodexOAuthTransform_PreservesMCPToolCallIDAndName(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"input": []any{
+			map[string]any{
+				"type":      "mcp_tool_call",
+				"call_id":   "call_abc",
+				"name":      "remote_tool",
+				"arguments": "{}",
+			},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 1)
+	item, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "mcp_tool_call", item["type"])
+	require.Equal(t, "remote_tool", item["name"])
+	require.Equal(t, "fcabc", item["call_id"])
+}
+
+func TestCodexInputItemRequiresNameTypesAllowCallID(t *testing.T) {
+	for _, typ := range []string{"function_call", "custom_tool_call", "mcp_tool_call"} {
+		require.True(t, codexInputItemRequiresName(typ), typ)
+		require.True(t, isCodexToolCallItemType(typ), typ)
+	}
 }
 
 func TestApplyCodexOAuthTransform_ExplicitStoreFalsePreserved(t *testing.T) {
@@ -241,6 +510,270 @@ func TestNormalizeOpenAIResponsesImageGenerationTools_RewritesLegacyFields(t *te
 	require.False(t, hasFormat)
 	_, hasCompression := first["compression"]
 	require.False(t, hasCompression)
+}
+
+func TestEnsureOpenAIResponsesImageGenerationTool_NoTools(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"input": "draw a cat",
+	}
+
+	modified := ensureOpenAIResponsesImageGenerationTool(reqBody)
+	require.True(t, modified)
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "image_generation", tool["type"])
+	require.Equal(t, "png", tool["output_format"])
+}
+
+func TestEnsureOpenAIResponsesImageGenerationTool_SkipsSpark(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.3-codex-spark",
+		"input": "draw a cat",
+	}
+
+	modified := ensureOpenAIResponsesImageGenerationTool(reqBody)
+	require.False(t, modified)
+	require.NotContains(t, reqBody, "tools")
+}
+
+func TestEnsureOpenAIResponsesImageGenerationTool_AppendsToExistingTools(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"tools": []any{
+			map[string]any{"type": "web_search"},
+		},
+	}
+
+	modified := ensureOpenAIResponsesImageGenerationTool(reqBody)
+	require.True(t, modified)
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 2)
+	first, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "web_search", first["type"])
+	second, ok := tools[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "image_generation", second["type"])
+	require.Equal(t, "png", second["output_format"])
+}
+
+func TestEnsureOpenAIResponsesImageGenerationTool_PreservesExistingImageTool(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.4",
+		"tools": []any{
+			map[string]any{"type": "image_generation", "output_format": "webp"},
+			map[string]any{"type": "web_search"},
+		},
+	}
+
+	modified := ensureOpenAIResponsesImageGenerationTool(reqBody)
+	require.False(t, modified)
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 2)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "webp", tool["output_format"])
+}
+
+func TestApplyCodexImageGenerationBridgeInstructions_AppendsBridgeOnce(t *testing.T) {
+	reqBody := map[string]any{
+		"model":        "gpt-5.4",
+		"instructions": "existing instructions",
+		"tools": []any{
+			map[string]any{"type": "image_generation", "output_format": "png"},
+		},
+	}
+
+	modified := applyCodexImageGenerationBridgeInstructions(reqBody)
+	require.True(t, modified)
+
+	instructions, ok := reqBody["instructions"].(string)
+	require.True(t, ok)
+	require.Contains(t, instructions, "existing instructions")
+	require.Contains(t, instructions, codexImageGenerationBridgeMarker)
+	require.Contains(t, instructions, "Responses native `image_generation` tool")
+
+	modified = applyCodexImageGenerationBridgeInstructions(reqBody)
+	require.False(t, modified)
+}
+
+func TestApplyCodexImageGenerationBridgeInstructions_SkipsSpark(t *testing.T) {
+	reqBody := map[string]any{
+		"model":        "gpt-5.3-codex-spark",
+		"instructions": "existing instructions",
+		"tools": []any{
+			map[string]any{"type": "image_generation", "output_format": "png"},
+		},
+	}
+
+	modified := applyCodexImageGenerationBridgeInstructions(reqBody)
+	require.False(t, modified)
+	require.Equal(t, "existing instructions", reqBody["instructions"])
+}
+
+func TestApplyCodexImageGenerationBridgeInstructions_SkipsWithoutImageTool(t *testing.T) {
+	reqBody := map[string]any{
+		"instructions": "existing instructions",
+		"tools": []any{
+			map[string]any{"type": "web_search"},
+		},
+	}
+
+	modified := applyCodexImageGenerationBridgeInstructions(reqBody)
+	require.False(t, modified)
+	require.Equal(t, "existing instructions", reqBody["instructions"])
+}
+
+func TestValidateCodexSparkInputRejectsInputImage(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.3-codex-spark",
+		"input": []any{
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "input_text", "text": "describe"},
+					map[string]any{"type": "input_image", "image_url": "data:image/png;base64,aGVsbG8="},
+				},
+			},
+		},
+	}
+
+	err := validateCodexSparkInput(reqBody, "gpt-5.3-codex-spark")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "does not support image input")
+}
+
+func TestValidateCodexSparkInputRejectsChatImageURL(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.3-codex-spark",
+		"messages": []any{
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "text", "text": "describe"},
+					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,aGVsbG8="}},
+				},
+			},
+		},
+	}
+
+	err := validateCodexSparkInput(reqBody, "gpt-5.3-codex-spark")
+	require.Error(t, err)
+}
+
+func TestValidateCodexSparkInputAllowsTextOnly(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.3-codex-spark",
+		"input": []any{
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "input_text", "text": "hello"},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, validateCodexSparkInput(reqBody, "gpt-5.3-codex-spark"))
+}
+
+func TestApplyCodexOAuthTransform_AddsSparkImageUnsupportedInstructions(t *testing.T) {
+	reqBody := map[string]any{
+		"model":        "gpt-5.3-codex-spark",
+		"instructions": "existing instructions",
+		"input":        "hello",
+	}
+
+	result := applyCodexOAuthTransform(reqBody, true, false)
+	require.True(t, result.Modified)
+
+	instructions, ok := reqBody["instructions"].(string)
+	require.True(t, ok)
+	require.Contains(t, instructions, "existing instructions")
+	require.Contains(t, instructions, codexSparkImageUnsupportedMarker)
+	require.Contains(t, instructions, "does not support image generation")
+	require.Contains(t, instructions, "switch to a non-Spark Codex model")
+	require.NotContains(t, instructions, codexImageGenerationBridgeMarker)
+}
+
+func TestApplyCodexOAuthTransform_DoesNotAddSparkImageUnsupportedForNonSpark(t *testing.T) {
+	reqBody := map[string]any{
+		"model":        "gpt-5.4",
+		"instructions": "existing instructions",
+		"input":        "hello",
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+	instructions, ok := reqBody["instructions"].(string)
+	require.True(t, ok)
+	require.NotContains(t, instructions, codexSparkImageUnsupportedMarker)
+}
+
+func TestNormalizeOpenAIResponsesImageOnlyModel_BuildsImageToolRequest(t *testing.T) {
+	reqBody := map[string]any{
+		"model":         "gpt-image-2",
+		"prompt":        "draw a cat",
+		"size":          "1024x1024",
+		"output_format": "png",
+	}
+
+	modified := normalizeOpenAIResponsesImageOnlyModel(reqBody)
+	require.True(t, modified)
+	require.Equal(t, openAIImagesResponsesMainModel, reqBody["model"])
+	require.Equal(t, "draw a cat", reqBody["input"])
+	_, hasPrompt := reqBody["prompt"]
+	require.False(t, hasPrompt)
+	_, hasTopLevelSize := reqBody["size"]
+	require.False(t, hasTopLevelSize)
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "image_generation", tool["type"])
+	require.Equal(t, "gpt-image-2", tool["model"])
+	require.Equal(t, "1024x1024", tool["size"])
+	require.Equal(t, "png", tool["output_format"])
+
+	choice, ok := reqBody["tool_choice"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "image_generation", choice["type"])
+}
+
+func TestNormalizeOpenAIResponsesImageOnlyModel_PreservesExistingImageTool(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-image-2",
+		"input": "draw a cat",
+		"tools": []any{
+			map[string]any{
+				"type":  "image_generation",
+				"model": "gpt-image-1.5",
+			},
+		},
+		"tool_choice": "auto",
+	}
+
+	modified := normalizeOpenAIResponsesImageOnlyModel(reqBody)
+	require.True(t, modified)
+	require.Equal(t, openAIImagesResponsesMainModel, reqBody["model"])
+	require.Equal(t, "auto", reqBody["tool_choice"])
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "gpt-image-1.5", tool["model"])
 }
 
 func TestValidateOpenAIResponsesImageModel_RejectsImageOnlyModel(t *testing.T) {
@@ -555,6 +1088,27 @@ func TestApplyCodexOAuthTransform_StripsPromptCacheRetention(t *testing.T) {
 		"prompt_cache_retention must be stripped before forwarding to Codex upstream")
 }
 
+func TestApplyCodexOAuthTransform_StripsChatGPTInternalUnsupportedFields(t *testing.T) {
+	reqBody := map[string]any{
+		"model":                  "gpt-5.4",
+		"user":                   "user_123",
+		"metadata":               map[string]any{"trace_id": "abc"},
+		"prompt_cache_retention": "24h",
+		"safety_identifier":      "sid",
+		"stream_options":         map[string]any{"include_usage": true},
+		"input": []any{
+			map[string]any{"role": "user", "content": "hi"},
+		},
+	}
+
+	result := applyCodexOAuthTransform(reqBody, true, false)
+
+	require.True(t, result.Modified)
+	for _, field := range openAIChatGPTInternalUnsupportedFields {
+		require.NotContains(t, reqBody, field)
+	}
+}
+
 func TestApplyCodexOAuthTransform_ExtractsSystemMessages(t *testing.T) {
 	reqBody := map[string]any{
 		"model": "gpt-5.1",
@@ -598,6 +1152,59 @@ func TestIsInstructionsEmpty(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isInstructionsEmpty(tt.reqBody)
 			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFilterCodexInput_DropsReasoningItemsRegardlessOfPreserveReferences(t *testing.T) {
+	// Reasoning items in input[] reference rs_* IDs that were emitted by
+	// chatgpt.com under store=false (forced by applyCodexOAuthTransform).
+	// They are never persisted upstream, so forwarding them produces a
+	// guaranteed 404 ("Item with id 'rs_...' not found"). Drop them
+	// regardless of preserveReferences. See: Wei-Shaw/sub2api issue #1957.
+
+	build := func() []any {
+		return []any{
+			map[string]any{"type": "message", "id": "msg_0", "role": "user", "content": "hi"},
+			map[string]any{
+				"type":    "reasoning",
+				"id":      "rs_0672f12450da0b9c0169f07220a6c08198b68c2455ced99344",
+				"summary": []any{},
+			},
+			map[string]any{"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "tool"},
+			map[string]any{"type": "function_call_output", "call_id": "call_1", "output": "{}"},
+		}
+	}
+
+	for _, preserve := range []bool{true, false} {
+		preserve := preserve
+		t.Run(fmt.Sprintf("preserveReferences=%v", preserve), func(t *testing.T) {
+			filtered := filterCodexInput(build(), preserve)
+
+			for _, raw := range filtered {
+				item, ok := raw.(map[string]any)
+				require.True(t, ok)
+				require.NotEqual(t, "reasoning", item["type"],
+					"reasoning items must be dropped from input on the OAuth path")
+				if id, ok := item["id"].(string); ok {
+					require.False(t, strings.HasPrefix(id, "rs_"),
+						"no item carrying an rs_* id should survive the filter")
+				}
+			}
+
+			// Sanity check: the non-reasoning items should still be present.
+			gotTypes := make(map[string]int)
+			for _, raw := range filtered {
+				item, ok := raw.(map[string]any)
+				require.True(t, ok)
+				typ, ok := item["type"].(string)
+				require.True(t, ok)
+				gotTypes[typ]++
+			}
+			require.Equal(t, 1, gotTypes["message"])
+			require.Equal(t, 1, gotTypes["function_call"])
+			require.Equal(t, 1, gotTypes["function_call_output"])
+			require.Equal(t, 0, gotTypes["reasoning"])
 		})
 	}
 }

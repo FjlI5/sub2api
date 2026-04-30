@@ -715,6 +715,10 @@ func TestAPIContracts(t *testing.T) {
 					"force_email_on_third_party_signup": false,
 					"default_concurrency": 5,
 					"default_balance": 1.25,
+					"affiliate_rebate_rate": 20,
+					"affiliate_rebate_freeze_hours": 0,
+					"affiliate_rebate_duration_days": 0,
+					"affiliate_rebate_per_invitee_cap": 0,
 					"default_user_rpm_limit": 0,
 					"default_subscriptions": [],
 					"enable_model_fallback": false,
@@ -736,6 +740,7 @@ func TestAPIContracts(t *testing.T) {
 					"allow_ungrouped_key_scheduling": false,
 					"backend_mode_enabled": false,
 					"enable_cch_signing": false,
+					"enable_anthropic_cache_ttl_1h_injection": false,
 					"enable_fingerprint_unification": true,
 					"enable_metadata_passthrough": false,
 					"web_search_emulation_enabled": false,
@@ -744,6 +749,16 @@ func TestAPIContracts(t *testing.T) {
 					"payment_visible_method_alipay_enabled": true,
 					"payment_visible_method_wxpay_enabled": false,
 					"openai_advanced_scheduler_enabled": true,
+					"openai_fast_policy_settings": {
+						"rules": [
+							{
+								"service_tier": "priority",
+								"action": "filter",
+								"scope": "all",
+								"fallback_action": "pass"
+							}
+						]
+					},
 					"custom_menu_items": [],
 					"custom_endpoints": [],
 					"payment_enabled": false,
@@ -771,6 +786,10 @@ func TestAPIContracts(t *testing.T) {
 					"balance_low_notify_threshold": 0,
 					"balance_low_notify_recharge_url": "",
 					"account_quota_notify_emails": [],
+					"channel_monitor_enabled": true,
+					"channel_monitor_default_interval_seconds": 60,
+					"available_channels_enabled": false,
+					"affiliate_enabled": false,
 					"wechat_connect_enabled": false,
 					"wechat_connect_app_id": "",
 					"wechat_connect_app_secret_configured": false,
@@ -892,6 +911,10 @@ func TestAPIContracts(t *testing.T) {
 					"custom_endpoints": [],
 					"default_concurrency": 0,
 					"default_balance": 0,
+					"affiliate_rebate_rate": 20,
+					"affiliate_rebate_freeze_hours": 0,
+					"affiliate_rebate_duration_days": 0,
+					"affiliate_rebate_per_invitee_cap": 0,
 					"default_user_rpm_limit": 0,
 					"default_subscriptions": [],
 					"enable_model_fallback": false,
@@ -912,12 +935,23 @@ func TestAPIContracts(t *testing.T) {
 					"enable_fingerprint_unification": true,
 					"enable_metadata_passthrough": false,
 					"enable_cch_signing": false,
+					"enable_anthropic_cache_ttl_1h_injection": false,
 					"web_search_emulation_enabled": false,
 					"payment_visible_method_alipay_source": "",
 					"payment_visible_method_wxpay_source": "",
 					"payment_visible_method_alipay_enabled": false,
 					"payment_visible_method_wxpay_enabled": false,
 					"openai_advanced_scheduler_enabled": false,
+					"openai_fast_policy_settings": {
+						"rules": [
+							{
+								"service_tier": "priority",
+								"action": "filter",
+								"scope": "all",
+								"fallback_action": "pass"
+							}
+						]
+					},
 					"payment_enabled": false,
 					"payment_min_amount": 0,
 					"payment_max_amount": 0,
@@ -943,6 +977,10 @@ func TestAPIContracts(t *testing.T) {
 					"balance_low_notify_threshold": 0,
 					"balance_low_notify_recharge_url": "",
 					"account_quota_notify_emails": [],
+					"channel_monitor_enabled": true,
+					"channel_monitor_default_interval_seconds": 60,
+					"available_channels_enabled": false,
+					"affiliate_enabled": false,
 					"wechat_connect_enabled": true,
 					"wechat_connect_app_id": "wx-open-config",
 					"wechat_connect_app_secret_configured": true,

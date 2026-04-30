@@ -153,7 +153,7 @@
       <!-- Account Type Selection (Anthropic) -->
       <div v-if="form.platform === 'anthropic'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-3 gap-3" data-tour="account-form-type">
+        <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4" data-tour="account-form-type">
           <button
             type="button"
             @click="accountCategory = 'oauth-based'"
@@ -244,6 +244,39 @@
             </div>
           </button>
 
+          <button
+            type="button"
+            @click="accountCategory = 'service_account'"
+            :class="[
+              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
+              accountCategory === 'service_account'
+                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20'
+                : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
+            ]"
+          >
+            <div
+              :class="[
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                accountCategory === 'service_account'
+                  ? 'bg-sky-500 text-white'
+                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+              ]"
+            >
+              <Icon name="cloud" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">Vertex</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">Service Account</span>
+            </div>
+          </button>
+
+        </div>
+
+        <div
+          v-if="accountCategory === 'service_account'"
+          class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
+        >
+          <p>{{ t('admin.accounts.vertexAnthropicHint') }}</p>
         </div>
       </div>
 
@@ -302,6 +335,7 @@
               <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.responsesApi') }}</span>
             </div>
           </button>
+
         </div>
       </div>
 
@@ -320,7 +354,7 @@
             {{ t('admin.accounts.gemini.helpButton') }}
           </button>
         </div>
-        <div class="mt-2 grid grid-cols-2 gap-3" data-tour="account-form-type">
+        <div class="mt-2 grid grid-cols-3 gap-3" data-tour="account-form-type">
           <button
             type="button"
             @click="accountCategory = 'oauth-based'"
@@ -392,6 +426,36 @@
               </span>
             </div>
           </button>
+
+          <button
+            type="button"
+            @click="accountCategory = 'service_account'"
+            :class="[
+              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
+              accountCategory === 'service_account'
+                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20'
+                : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
+            ]"
+          >
+            <div
+              :class="[
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                accountCategory === 'service_account'
+                  ? 'bg-sky-500 text-white'
+                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+              ]"
+            >
+              <Icon name="cloud" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">
+                Vertex
+              </span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                Service Account
+              </span>
+            </div>
+          </button>
         </div>
 
         <div
@@ -409,6 +473,13 @@
               {{ t('admin.accounts.gemini.accountType.apiKeyLink') }}
             </a>
           </div>
+        </div>
+
+        <div
+          v-if="accountCategory === 'service_account'"
+          class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
+        >
+          <p>{{ t('admin.accounts.vertexGeminiHint') }}</p>
         </div>
 
         <!-- OAuth Type Selection (only show when oauth-based is selected) -->
@@ -610,7 +681,7 @@
         </div>
 
         <!-- Tier selection (used as fallback when auto-detection is unavailable/fails) -->
-        <div class="mt-4">
+        <div v-if="accountCategory !== 'service_account'" class="mt-4">
           <label class="input-label">{{ t('admin.accounts.gemini.tier.label') }}</label>
           <div class="mt-2">
             <select
@@ -726,6 +797,96 @@
             placeholder="sk-..."
           />
           <p class="input-hint">{{ t('admin.accounts.upstream.apiKeyHint') }}</p>
+        </div>
+      </div>
+
+      <!-- Vertex Service Account -->
+      <div v-if="(form.platform === 'gemini' || form.platform === 'anthropic') && accountCategory === 'service_account'" class="space-y-4">
+        <div>
+          <label class="input-label">Service Account JSON</label>
+          <input
+            ref="vertexServiceAccountFileInput"
+            type="file"
+            accept="application/json,.json"
+            class="hidden"
+            @change="handleVertexServiceAccountFile"
+          />
+          <div
+            :class="[
+              'rounded-lg border-2 border-dashed px-4 py-5 transition-colors',
+              vertexServiceAccountDragActive
+                ? 'border-sky-500 bg-sky-50 dark:border-sky-500 dark:bg-sky-900/20'
+                : 'border-gray-300 bg-gray-50 hover:border-sky-400 hover:bg-sky-50/60 dark:border-dark-500 dark:bg-dark-700/40 dark:hover:border-sky-600 dark:hover:bg-sky-900/10'
+            ]"
+            @dragenter.prevent="vertexServiceAccountDragActive = true"
+            @dragover.prevent="vertexServiceAccountDragActive = true"
+            @dragleave.prevent="vertexServiceAccountDragActive = false"
+            @drop.prevent="handleVertexServiceAccountDrop"
+          >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                  <Icon name="upload" size="sm" />
+                  <span>{{ vertexClientEmail ? t('admin.accounts.vertexSaJsonLoaded') : t('admin.accounts.vertexSaJsonDrop') }}</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ vertexClientEmail ? t('admin.accounts.vertexSaJsonKeyHidden') : t('admin.accounts.vertexSaJsonDropHint') }}
+                </p>
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary shrink-0"
+                @click="vertexServiceAccountFileInput?.click()"
+              >
+                <Icon name="upload" size="sm" />
+                {{ t('admin.accounts.vertexSaJsonSelectBtn') }}
+              </button>
+            </div>
+            <div
+              v-if="vertexClientEmail"
+              class="mt-3 rounded-md border border-sky-200 bg-white px-3 py-2 text-xs text-sky-900 dark:border-sky-800/50 dark:bg-dark-800 dark:text-sky-200"
+            >
+              <div class="truncate">Project ID: <span class="font-mono">{{ vertexProjectId }}</span></div>
+              <div class="truncate">Client Email: <span class="font-mono">{{ vertexClientEmail }}</span></div>
+            </div>
+          </div>
+          <p class="input-hint">{{ t('admin.accounts.vertexSaJsonUploadHint') }}</p>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="input-label">Project ID</label>
+            <input
+              v-model="vertexProjectId"
+              type="text"
+              class="input font-mono"
+              readonly
+              :placeholder="t('admin.accounts.vertexProjectIdPlaceholder')"
+            />
+          </div>
+          <div>
+            <label class="input-label">Location</label>
+            <select
+              v-model="vertexLocation"
+              required
+              class="input font-mono"
+            >
+              <optgroup
+                v-for="group in VERTEX_LOCATION_OPTIONS"
+                :key="group.label"
+                :label="group.label"
+              >
+                <option
+                  v-for="option in group.options"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </optgroup>
+            </select>
+            <p class="input-hint">{{ t('admin.accounts.vertexLocationHint') }}</p>
+          </div>
         </div>
       </div>
 
@@ -2449,6 +2610,45 @@
         </div>
       </div>
 
+      <!-- OpenAI Compact 能力配置 -->
+      <div
+        v-if="form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+      >
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.compactMode') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.compactModeDesc') }}
+            </p>
+          </div>
+          <div class="w-44">
+            <Select v-model="openAICompactMode" :options="openAICompactModeOptions" />
+          </div>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.openai.compactModelMapping') }}</label>
+          <p class="input-hint">{{ t('admin.accounts.openai.compactModelMappingDesc') }}</p>
+          <div v-if="openAICompactModelMappings.length > 0" class="mb-3 space-y-2">
+            <div
+              v-for="(mapping, index) in openAICompactModelMappings"
+              :key="getOpenAICompactModelMappingKey(mapping)"
+              class="flex items-center gap-2"
+            >
+              <input v-model="mapping.from" type="text" class="input flex-1" :placeholder="t('admin.accounts.fromModel')" />
+              <span class="text-gray-400">→</span>
+              <input v-model="mapping.to" type="text" class="input flex-1" :placeholder="t('admin.accounts.toModel')" />
+              <button type="button" @click="removeOpenAICompactModelMapping(index)" class="text-red-500 hover:text-red-700">
+                <Icon name="trash" size="sm" />
+              </button>
+            </div>
+          </div>
+          <button type="button" @click="addOpenAICompactModelMapping" class="btn btn-secondary text-sm">
+            + {{ t('admin.accounts.addMapping') }}
+          </button>
+        </div>
+      </div>
+
       <div>
         <div class="flex items-center justify-between">
           <div>
@@ -2918,7 +3118,8 @@ import type {
   AccountPlatform,
   AccountType,
   CheckMixedChannelResponse,
-  CreateAccountRequest
+  CreateAccountRequest,
+  OpenAICompactMode
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -2931,6 +3132,7 @@ import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import { applyInterceptWarmup } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -3045,7 +3247,7 @@ interface TempUnschedRuleForm {
 // State
 const step = ref(1)
 const submitting = ref(false)
-const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock'>('oauth-based') // UI selection for account category
+const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
@@ -3059,6 +3261,7 @@ const editWeeklyResetDay = ref<number | null>(null)
 const editWeeklyResetHour = ref<number | null>(null)
 const editResetTimezone = ref<string | null>(null)
 const modelMappings = ref<ModelMapping[]>([])
+const openAICompactModelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
@@ -3071,6 +3274,7 @@ const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(true)
 const openaiPassthroughEnabled = ref(false)
+const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
@@ -3109,13 +3313,25 @@ const bedrockSessionToken = ref('')
 const bedrockRegion = ref('us-east-1')
 const bedrockForceGlobal = ref(false)
 const bedrockApiKeyValue = ref('')
+const vertexServiceAccountFileInput = ref<HTMLInputElement | null>(null)
+const vertexServiceAccountJson = ref('')
+const vertexProjectId = ref('')
+const vertexClientEmail = ref('')
+const vertexLocation = ref('global')
+const vertexServiceAccountDragActive = ref(false)
 const tempUnschedEnabled = ref(false)
 const tempUnschedRules = ref<TempUnschedRuleForm[]>([])
 const getModelMappingKey = createStableObjectKeyResolver<ModelMapping>('create-model-mapping')
+const getOpenAICompactModelMappingKey = createStableObjectKeyResolver<ModelMapping>('create-openai-compact-model-mapping')
 const getAntigravityModelMappingKey = createStableObjectKeyResolver<ModelMapping>('create-antigravity-model-mapping')
 const getTempUnschedRuleKey = createStableObjectKeyResolver<TempUnschedRuleForm>('create-temp-unsched-rule')
 const geminiOAuthType = ref<'code_assist' | 'google_one' | 'ai_studio'>('google_one')
 const geminiAIStudioOAuthEnabled = ref(false)
+const openAICompactModeOptions = computed(() => [
+  { value: 'auto', label: t('admin.accounts.openai.compactModeAuto') },
+  { value: 'force_on', label: t('admin.accounts.openai.compactModeForceOn') },
+  { value: 'force_off', label: t('admin.accounts.openai.compactModeForceOff') }
+])
 
 function buildAntigravityExtra(): Record<string, unknown> | undefined {
   const extra: Record<string, unknown> = {}
@@ -3123,6 +3339,9 @@ function buildAntigravityExtra(): Record<string, unknown> | undefined {
   if (allowOverages.value) extra.allow_overages = true
   return Object.keys(extra).length > 0 ? extra : undefined
 }
+
+const buildOpenAICompactModelMapping = () =>
+  buildModelMappingObject('mapping', [], openAICompactModelMappings.value)
 
 const showMixedChannelWarning = ref(false)
 const mixedChannelWarningDetails = ref<{ groupName: string; currentPlatform: string; otherPlatform: string } | null>(
@@ -3346,7 +3565,7 @@ watch(
 
 // Sync form.type based on accountCategory, addMethod, and platform-specific type
 watch(
-  [accountCategory, addMethod, antigravityAccountType],
+  [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
@@ -3358,7 +3577,9 @@ watch(
       form.type = 'bedrock' as AccountType
       return
     }
-    if (category === 'oauth-based') {
+    if ((form.platform === 'gemini' || form.platform === 'anthropic') && category === 'service_account') {
+      form.type = 'service_account' as AccountType
+    } else if (category === 'oauth-based') {
       form.type = method as AccountType // 'oauth' or 'setup-token'
     } else {
       form.type = 'apikey'
@@ -3396,6 +3617,12 @@ watch(
       antigravityModelMappings.value = []
       antigravityModelRestrictionMode.value = 'mapping'
     }
+    if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
+      accountCategory.value = 'oauth-based'
+    }
+    if (newPlatform !== 'anthropic' && accountCategory.value === 'bedrock') {
+      accountCategory.value = 'oauth-based'
+    }
     // Reset Bedrock fields when switching platforms
     bedrockAccessKeyId.value = ''
     bedrockSecretAccessKey.value = ''
@@ -3404,6 +3631,10 @@ watch(
     bedrockForceGlobal.value = false
     bedrockAuthMode.value = 'sigv4'
     bedrockApiKeyValue.value = ''
+    vertexServiceAccountJson.value = ''
+    vertexProjectId.value = ''
+    vertexClientEmail.value = ''
+    vertexLocation.value = 'global'
     // Reset Anthropic/Antigravity-specific settings when switching to other platforms
     if (newPlatform !== 'anthropic' && newPlatform !== 'antigravity') {
       interceptWarmupRequests.value = false
@@ -3487,6 +3718,14 @@ watch(
 // Model mapping helpers
 const addModelMapping = () => {
   modelMappings.value.push({ from: '', to: '' })
+}
+
+const addOpenAICompactModelMapping = () => {
+  openAICompactModelMappings.value.push({ from: '', to: '' })
+}
+
+const removeOpenAICompactModelMapping = (index: number) => {
+  openAICompactModelMappings.value.splice(index, 1)
 }
 
 const removeModelMapping = (index: number) => {
@@ -3781,6 +4020,7 @@ const resetForm = () => {
   editWeeklyResetHour.value = null
   editResetTimezone.value = null
   modelMappings.value = []
+  openAICompactModelMappings.value = []
   modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...claudeModels] // Default fill related models
 
@@ -3797,6 +4037,7 @@ const resetForm = () => {
   interceptWarmupRequests.value = false
   autoPauseOnExpired.value = true
   openaiPassthroughEnabled.value = false
+  openAICompactMode.value = 'auto'
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
@@ -3825,6 +4066,10 @@ const resetForm = () => {
   antigravityAccountType.value = 'oauth'
   upstreamBaseUrl.value = ''
   upstreamApiKey.value = ''
+  vertexServiceAccountJson.value = ''
+  vertexProjectId.value = ''
+  vertexClientEmail.value = ''
+  vertexLocation.value = 'global'
   tempUnschedEnabled.value = false
   tempUnschedRules.value = []
   geminiOAuthType.value = 'code_assist'
@@ -3873,6 +4118,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     extra.codex_cli_only = true
   } else {
     delete extra.codex_cli_only
+  }
+  if (openAICompactMode.value !== 'auto') {
+    extra.openai_compact_mode = openAICompactMode.value
+  } else {
+    delete extra.openai_compact_mode
   }
 
   return Object.keys(extra).length > 0 ? extra : undefined
@@ -3941,6 +4191,52 @@ const normalizePoolModeRetryCount = (value: number) => {
     return MAX_POOL_MODE_RETRY_COUNT
   }
   return normalized
+}
+
+const applyVertexServiceAccountJson = (value: string) => {
+  const raw = value.trim()
+  if (!raw) {
+    vertexProjectId.value = ''
+    vertexClientEmail.value = ''
+    return false
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const projectId = typeof parsed.project_id === 'string' ? parsed.project_id.trim() : ''
+    const clientEmail = typeof parsed.client_email === 'string' ? parsed.client_email.trim() : ''
+    const privateKey = typeof parsed.private_key === 'string' ? parsed.private_key.trim() : ''
+    if (!projectId || !clientEmail || !privateKey) {
+      appStore.showError(t('admin.accounts.vertexSaJsonMissingFields'))
+      return false
+    }
+    vertexProjectId.value = projectId
+    vertexClientEmail.value = clientEmail
+    vertexServiceAccountJson.value = JSON.stringify(parsed)
+    return true
+  } catch {
+    appStore.showError(t('admin.accounts.vertexSaJsonInvalid'))
+    return false
+  }
+}
+
+const parseVertexServiceAccountJson = () => applyVertexServiceAccountJson(vertexServiceAccountJson.value)
+
+const handleVertexServiceAccountFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    applyVertexServiceAccountJson(await file.text())
+  } finally {
+    input.value = ''
+  }
+}
+
+const handleVertexServiceAccountDrop = async (event: DragEvent) => {
+  vertexServiceAccountDragActive.value = false
+  const file = event.dataTransfer?.files?.[0]
+  if (!file) return
+  applyVertexServiceAccountJson(await file.text())
 }
 
 const handleSubmit = async () => {
@@ -4056,6 +4352,29 @@ const handleSubmit = async () => {
     return
   }
 
+  if ((form.platform === 'gemini' || form.platform === 'anthropic') && accountCategory.value === 'service_account') {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    if (!parseVertexServiceAccountJson()) {
+      return
+    }
+    if (!vertexLocation.value.trim()) {
+      appStore.showError(t('admin.accounts.vertexLocationRequired'))
+      return
+    }
+    const credentials: Record<string, unknown> = {
+      service_account_json: vertexServiceAccountJson.value.trim(),
+      project_id: vertexProjectId.value.trim(),
+      client_email: vertexClientEmail.value.trim(),
+      location: vertexLocation.value.trim(),
+      tier_id: 'vertex'
+    }
+    await createAccountAndFinish(form.platform, 'service_account' as AccountType, credentials)
+    return
+  }
+
   // For apikey type, create directly
   if (!apiKeyValue.value.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
@@ -4084,6 +4403,12 @@ const handleSubmit = async () => {
     const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
     if (modelMapping) {
       credentials.model_mapping = modelMapping
+    }
+  }
+  if (form.platform === 'openai') {
+    const compactModelMapping = buildOpenAICompactModelMapping()
+    if (compactModelMapping) {
+      credentials.compact_model_mapping = compactModelMapping
     }
   }
 
@@ -4198,6 +4523,14 @@ const createAccountAndFinish = async (
       finalExtra = quotaExtra
     }
   }
+  if (platform === 'openai') {
+    const compactModelMapping = buildOpenAICompactModelMapping()
+    if (compactModelMapping) {
+      credentials.compact_model_mapping = compactModelMapping
+    } else {
+      delete credentials.compact_model_mapping
+    }
+  }
   await doCreateAccount({
     name: form.name,
     notes: form.notes,
@@ -4250,6 +4583,12 @@ const handleOpenAIExchange = async (authCode: string) => {
       const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
       if (modelMapping) {
         credentials.model_mapping = modelMapping
+      }
+    }
+    if (shouldCreateOpenAI) {
+      const compactModelMapping = buildOpenAICompactModelMapping()
+      if (compactModelMapping) {
+        credentials.compact_model_mapping = compactModelMapping
       }
     }
 
@@ -4342,6 +4681,12 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
           const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
           if (modelMapping) {
             credentials.model_mapping = modelMapping
+          }
+        }
+        if (shouldCreateOpenAI) {
+          const compactModelMapping = buildOpenAICompactModelMapping()
+          if (compactModelMapping) {
+            credentials.compact_model_mapping = compactModelMapping
           }
         }
 
