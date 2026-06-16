@@ -733,6 +733,7 @@ func ChatCompletionsChunkToResponsesEvents(
 				// A tool call closes any open reasoning item first.
 				events = append(events, closeChatReasoningItem(state)...)
 				copyCall := toolCall
+				copyCall.Function.Arguments = "" // accumulate via += below; avoid doubling the first inlined fragment
 				if copyCall.ID == "" {
 					copyCall.ID = generateItemID()
 				}
