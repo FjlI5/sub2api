@@ -405,6 +405,11 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
+	// 上游被强制流式，其响应头 Content-Type 为 text/event-stream，会经
+	// WriteFilteredHeaders 透传进来；gin 的 c.JSON 仅在头不存在时才设置、无法覆盖已有头。
+	// 非流式响应必须是 application/json，否则按 Content-Type 判流式的客户端（如 Claude
+	// 在 auto 模式做安全分类时发起的非流式请求）会把 JSON 当 SSE 解析而失败。
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, anthropicResp)
 
 	return &OpenAIForwardResult{
