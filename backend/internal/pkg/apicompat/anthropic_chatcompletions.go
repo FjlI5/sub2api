@@ -67,7 +67,14 @@ func AnthropicToChatCompletions(req *AnthropicRequest) (*ChatCompletionsRequest,
 			out.ToolChoice = tc
 		}
 	}
-	if effort := anthropicReasoningEffort(req); effort != "" {
+	// When the client explicitly disables thinking, forward {type:"disabled"} to
+	// the upstream (GLM/DeepSeek/Qwen/... honor it natively) and drop
+	// reasoning_effort, so we never send a "disable thinking" signal together with
+	// an effort hint that strict upstreams may reject. All other cases keep the
+	// existing reasoning_effort mapping (enabled / output_config.effort).
+	if req.Thinking != nil && req.Thinking.Type == "disabled" {
+		out.Thinking = &ChatThinking{Type: "disabled"}
+	} else if effort := anthropicReasoningEffort(req); effort != "" {
 		out.ReasoningEffort = effort
 	}
 	return out, nil

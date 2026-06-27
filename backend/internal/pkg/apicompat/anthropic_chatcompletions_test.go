@@ -149,6 +149,34 @@ func TestAnthropicToChatCompletions_ReasoningEffort(t *testing.T) {
 	assert.Equal(t, "xhigh", maxed.ReasoningEffort)
 }
 
+func TestAnthropicToChatCompletions_ThinkingDisabled(t *testing.T) {
+	// thinking:disabled must forward {type:"disabled"} to the upstream and drop
+	// reasoning_effort — even when output_config.effort would otherwise set one —
+	// so reasoning models (GLM/...) stop thinking instead of burning the token
+	// budget, and strict upstreams never see a disable+effort conflict.
+	out, err := AnthropicToChatCompletions(&AnthropicRequest{
+		Model:        "c",
+		Thinking:     &AnthropicThinking{Type: "disabled"},
+		OutputConfig: &AnthropicOutputConfig{Effort: "high"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, out.Thinking)
+	assert.Equal(t, "disabled", out.Thinking.Type)
+	assert.Equal(t, "", out.ReasoningEffort, "reasoning_effort must be dropped when thinking is disabled")
+
+	// Anthropic-only budget_tokens must never leak into the chat request.
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"thinking":{"type":"disabled"}`)
+	assert.NotContains(t, string(b), "budget_tokens")
+
+	// enabled keeps the existing reasoning_effort mapping and emits no thinking field.
+	enabled, err := AnthropicToChatCompletions(&AnthropicRequest{Model: "c", Thinking: &AnthropicThinking{Type: "enabled"}})
+	require.NoError(t, err)
+	assert.Nil(t, enabled.Thinking)
+	assert.Equal(t, "medium", enabled.ReasoningEffort)
+}
+
 // ---------------------------------------------------------------------------
 // Streaming chat -> Anthropic SSE tests
 // ---------------------------------------------------------------------------
